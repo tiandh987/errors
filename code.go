@@ -97,16 +97,16 @@ func MustRegister(coder Coder) {
 // =================================================
 type defaultCoder struct {
 	// C 指的是 ErrCode 的整数代码
-	C    int
+	C int
 
 	// HTTP status用于该错误代码的 HTTP 状态码。
 	HTTP int
 
 	// External 外部（用户）可见的错误文本
-	Ext  string
+	Ext string
 
 	// Reference 错误相关的 reference 文档
-	Ref  string
+	Ref string
 }
 
 func (coder defaultCoder) Code() int {

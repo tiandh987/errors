@@ -222,7 +222,7 @@ func Wrap(err error, message string) error {
 	if err == nil {
 		return nil
 	}
-	
+
 	if e, ok := err.(*withCode); ok {
 		return &withCode{
 			err:   fmt.Errorf(message),
@@ -231,12 +231,12 @@ func Wrap(err error, message string) error {
 			stack: callers(),
 		}
 	}
-	
+
 	err = &withMessage{
 		cause: err,
 		msg:   message,
 	}
-	
+
 	return &withStack{
 		error: err,
 		stack: callers(),
