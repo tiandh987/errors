@@ -1,8 +1,11 @@
 package errors
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // 文件内容：
@@ -47,6 +50,80 @@ func (w *withCode) Cause() error {
 // Unwrap provides compatibility for Go 1.13 error chains.
 func (w withCode) Unwrap() error {
 	return w.cause
+}
+
+// Format 实现 fmt.Formatter。 https://golang.org/pkg/fmt/#hdr-Printing
+//
+// Verbs：
+// 		%s - 如果没有指定错误消息, 返回映射到错误代码的用户安全错误字符串。
+// 		%v - %s 的别名
+//
+// Flags：
+// 		# JSON 格式的输出，用于记录日志
+// 		- 输出调用者详细信息，对故障排除有用
+// 		+ 输出完整的错误堆栈详细信息，对调试很有用
+//
+// Examples：
+//		%s:    error for internal read B
+//      %v:    error for internal read B
+//      %-v:   error for internal read B - #0 [/home/lk/workspace/golang/src/github.com/marmotedu/iam/main.go:12 (main.main)] (#100102) Internal Server Error
+//      %+v:   error for internal read B - #0 [/home/lk/workspace/golang/src/github.com/marmotedu/iam/main.go:12 (main.main)] (#100102) Internal Server Error; error for internal read A - #1 [/home/lk/workspace/golang/src/github.com/marmotedu/iam/main.go:35 (main.newErrorB)] (#100104) Validation failed
+//      %#v:   [{"error":"error for internal read B"}]
+//      %#-v:  [{"caller":"#0 /home/lk/workspace/golang/src/github.com/marmotedu/iam/main.go:12 (main.main)","error":"error for internal read B","message":"(#100102) Internal Server Error"}]
+//      %#+v:  [{"caller":"#0 /home/lk/workspace/golang/src/github.com/marmotedu/iam/main.go:12 (main.main)","error":"error for internal read B","message":"(#100102) Internal Server Error"},{"caller":"#1 /home/lk/workspace/golang/src/github.com/marmotedu/iam/main.go:35 (main.newErrorB)","error":"error for internal read A","message":"(#100104) Validation failed"}]
+func (w *withCode) Format(state fmt.State, verb rune) {
+	switch verb {
+	case 'v':
+		str := bytes.NewBuffer([]byte{})
+		jsonData := []map[string]interface{}{}
+
+		var (
+			flagDetail bool
+			flagTrace  bool
+			modeJSON   bool
+		)
+
+		if state.Flag('#') {
+			modeJSON = true
+		}
+
+		if state.Flag('-') {
+			flagDetail = true
+		}
+
+		if state.Flag('+') {
+			flagTrace = true
+		}
+
+		sep := ""
+		errs := list(w)
+		length := len(errs)
+		for k, e := range errs {
+			finfo := buildFormatInfo(e)
+			jsonData, str = format(length-k-1, jsonData, str, finfo, sep, flagDetail, flagTrace, modeJSON)
+			sep = "; "
+
+			if !flagTrace {
+				break
+			}
+
+			if !flagDetail && !flagTrace && !modeJSON {
+				break
+			}
+		}
+
+		if modeJSON {
+			var byts []byte
+			byts, _ = json.Marshal(jsonData)
+
+			str.Write(byts)
+		}
+
+		fmt.Fprintf(state, "%s", strings.Trim(str.String(), "\r\n\t"))
+	default:
+		finfo := buildFormatInfo(w)
+		fmt.Fprintf(state, finfo.message)
+	}
 }
 
 // WithCode 函数创建新的 withCode 类型的错误
